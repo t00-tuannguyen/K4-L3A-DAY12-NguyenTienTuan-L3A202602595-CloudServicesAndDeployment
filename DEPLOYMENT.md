@@ -10,17 +10,17 @@
 
 | Mục | Nội dung |
 |-----|----------|
-| Họ và tên | (điền họ tên) |
-| Mã học viên | (điền mã học viên) |
-| Repo | (điền link repo K4-L3A-DAY12-HoVaTen-MSSV-CloudServicesAndDeployment) |
+| Họ và tên | Nguyen Tien Tuan |
+| Mã học viên | L3A202602595 |
+| Repo | https://github.com/t00-tuannguyen/K4-L3A-DAY12-NguyenTienTuan-L3A202602595-CloudServicesAndDeployment |
 
 ## Service
 
 | Mục | Nội dung |
 |-----|----------|
-| Public URL | https://TODO-thay-bang-url-that.up.railway.app |
-| Platform | Railway / Render / Cloud Run — (điền platform bạn dùng) |
-| Ngày deploy | (điền ngày) |
+| Public URL | https://agent-production-fc4d.up.railway.app |
+| Platform | Railway (build từ `Dockerfile`, cấu hình `railway.toml`) |
+| Ngày deploy | 2026-09-28 |
 
 ## Biến Môi Trường Đã Set Trên Cloud
 
@@ -28,9 +28,9 @@ Ghi tên biến và **nguồn giá trị**, không ghi giá trị:
 
 | Biến | Đã set | Ghi chú |
 |------|--------|---------|
-| `PORT` | ✅ | platform tự gán |
-| `AGENT_API_KEY` | ✅ | đặt trong dashboard, không nằm trong repo |
-| `REDIS_URL` | ✅ | (điền: Redis add-on của platform / Upstash / ...) |
+| `PORT` | ✅ | Railway tự gán (quan sát trong log: `Uvicorn running on http://0.0.0.0:8080`) |
+| `AGENT_API_KEY` | ✅ | đặt bằng `railway add --variables`, khóa riêng cho cloud, không nằm trong repo |
+| `REDIS_URL` | ✅ | Redis add-on của Railway, tham chiếu `${{Redis.REDIS_URL}}` (mạng nội bộ `redis.railway.internal`) |
 | `RATE_LIMIT_PER_MINUTE` | ✅ | 10 |
 | `MONTHLY_BUDGET_USD` | ✅ | 10.0 |
 | `LOG_LEVEL` | ✅ | INFO |
@@ -72,9 +72,32 @@ done; echo
 
 Dán output của các lệnh trên vào đây:
 
+Chạy ngày 2026-09-28 với `URL=https://agent-production-fc4d.up.railway.app`, `AGENT_API_KEY` lấy từ `.env` cục bộ (không dán giá trị):
+
 ```
-(điền output)
+$ curl -i $URL/health
+HTTP/2 200 
+content-type: application/json
+{"status":"ok","service":"day12-agent","version":"1.0.0"}
+
+$ curl -i $URL/ready
+HTTP/2 200 
+content-type: application/json
+{"status":"ready","redis":true}
+
+$ curl -i -X POST $URL/ask  (không có API key)
+HTTP/2 401 
+{"detail":"invalid or missing API key"}
+
+$ curl -i -X POST $URL/ask  (có X-API-Key, X-User-Id: sv-test)
+HTTP/2 200 
+{"answer":"Câu hỏi hay. Deploy là gì thường được giải quyết bằng cách chuẩn hóa môi trường chạy: cùng một image chạy giống nhau ở laptop và trên cloud.","user_id":"sv-test","history_length":0,"cost_usd":2.145e-05,"tokens":{"in":3,"out":35}}
+
+$ for i in $(seq 1 15); do curl ... /ask; done   (rate limit)
+200 200 200 200 200 200 200 200 200 429 429 429 429 429 429
 ```
+
+Rate limit: 9 lần `200` rồi `429` vì request có key ở lệnh 4 đã dùng 1 trong 10 lượt của cửa sổ 60 giây.
 
 ## Ảnh Chụp Màn Hình
 
@@ -82,20 +105,3 @@ Dán output của các lệnh trên vào đây:
 
 - `screenshots/dashboard.png` — trang quản lý service trên platform
 - `screenshots/health.png` — kết quả gọi `/health` từ trình duyệt hoặc curl
-
----
-
-## Nếu Dùng Phương Án Dự Phòng
-
-Không đăng ký được tài khoản cloud? Vẫn nộp được bài, nhưng CP5 tối đa 60% điểm:
-
-1. Đặt `LOCAL_FALLBACK=true` trong `.env`
-2. Chạy `docker compose up -d` rồi kiểm tra `docker compose ps`
-3. Chụp màn hình vào `screenshots/`
-4. Chạy `pytest tests/test_cp5.py -v` — bộ test sẽ tự chuyển sang kiểm tra
-   `http://localhost:8000`
-5. Ghi rõ lý do không deploy được vào phần dưới đây:
-
-```
-(điền lý do nếu dùng phương án dự phòng, ngược lại xóa mục này)
-```
