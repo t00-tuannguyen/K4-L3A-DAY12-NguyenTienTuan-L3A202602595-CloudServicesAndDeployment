@@ -1,0 +1,85 @@
+# CI/CD: mỗi lần push/PR → test + build image trên máy sạch.
+# Chỉ push lên main mới deploy, và chỉ khi test + build đều xanh.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (CP1–CP4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # test_cp5 gọi vào bản deploy đang sống, test_bonus_cicd kiểm tra badge
+      # của chính workflow này → loại khỏi CI. Test build Docker để job build lo.
+      - name: Run pytest
+        env:
+          AGENT_API_KEY: ci-dummy
+          REDIS_URL: "fake://"
+        run: >
+          pytest tests/ -v -m "not docker"
+          --ignore=tests/test_cp5.py
+          --ignore=tests/test_bonus_cicd.py
+
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: docker build
+        run: docker build -t day12-agent:${{ github.sha }} .
+
+      - name: Image size
+        run: docker images day12-agent:${{ github.sha }} --format "{{.Repository}}:{{.Tag}} {{.Size}}"
+
+  deploy:
+    name: Deploy to Railway
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    # Không cho 2 lần deploy chạy chồng lên nhau
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: railway up
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service agent --ci
+
+      - name: Smoke test
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: |
+          sleep 45
+          curl -fsS --retry 10 --retry-delay 10 --retry-all-errors "$PUBLIC_URL/health"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "$PUBLIC_URL/ready"
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$PUBLIC_URL/ask" \
+            -H "Content-Type: application/json" -d '{"question":"smoke"}')
+          test "$code" = "401" || { echo "/ask without key returned $code, expected 401"; exit 1; }
