@@ -70,6 +70,24 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
 
 
+@app.get("/")
+def root():
+    """Trang gốc — cho người mở URL biết service là gì và gọi vào đâu.
+
+    Không gọi Redis, không cần API key: chỉ trả thông tin tĩnh.
+    """
+    return {
+        "service": SERVICE_NAME,
+        "version": SERVICE_VERSION,
+        "endpoints": {
+            "GET /health": "liveness probe",
+            "GET /ready": "readiness probe (kiểm tra Redis)",
+            "POST /ask": "hỏi agent — cần header X-API-Key",
+            "GET /docs": "tài liệu API (Swagger UI)",
+        },
+    }
+
+
 # ─────────────────────────────────────────────────────────────
 # Health & readiness
 # ─────────────────────────────────────────────────────────────
